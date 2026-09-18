@@ -12,7 +12,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Создаем простой Flask-сервер, чтобы Render не закрывал Web Service по тайм-ауту порта
+# Создаем простой Flask-сервер, чтобы Render не закрывал Web Service по таймауту порта
 app = Flask(__name__)
 
 @app.route("/")
@@ -24,23 +24,23 @@ def run_web():
     app.run(host="0.0.0.0", port=port)
 
 def main():
-    """Точка входа для запуска бота"""
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    if not token:
-        logger.error("Не найден TELEGRAM_BOT_TOKEN в переменных окружения!")
-        return
-
-    # Запускаем веб-сервер в отдельном потоке для Render
+    # Запускаем Flask-сервер в отдельном потоке
     web_thread = Thread(target=run_web)
     web_thread.daemon = True
     web_thread.start()
+
+    # Получаем токен из переменных окружения Render
+    token = os.getenv("TELEGRAM_TOKEN")
+    if not token:
+        logger.error("Не найден TELEGRAM_TOKEN в переменных окружения!")
+        return
 
     # Создаем приложение бота
     application = ApplicationBuilder().token(token).build()
 
     # Регистрируем обработчики
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     logger.info("Бот успешно запущен и ожидает сообщения...")
 
@@ -48,4 +48,4 @@ def main():
     application.run_polling()
 
 if __name__ == "__main__":
-    main()# update
+    main()
