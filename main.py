@@ -1,13 +1,27 @@
 import os
 import logging
+from threading import Thread
+from flask import Flask
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
-from bot_handlers import start_command, handle_text_message
+from bot_handlers import start_command, handle_message
 
-# Включаем логирование
+# Настройка логирования
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Создаем простой Flask-сервер, чтобы Render не закрывал Web Service по тайм-ауту порта
+app = Flask(__name__)
+
+@app.route("/")
+def health_check():
+    return "Bot is running!", 200
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
 def main():
     """Точка входа для запуска бота"""
@@ -16,16 +30,21 @@ def main():
         logger.error("Не найден TELEGRAM_BOT_TOKEN в переменных окружения!")
         return
 
+    # Запускаем веб-сервер в отдельном потоке для Render
+    web_thread = Thread(target=run_web)
+    web_thread.daemon = True
+    web_thread.start()
+
     # Создаем приложение бота
     application = ApplicationBuilder().token(token).build()
 
     # Регистрируем обработчики
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text_message))
+    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
     logger.info("Бот успешно запущен и ожидает сообщения...")
-    
-    # Запуск бота в режиме опросника (polling)
+
+    # Запуск бота в режиме опроса (polling)
     application.run_polling()
 
 if __name__ == "__main__":
