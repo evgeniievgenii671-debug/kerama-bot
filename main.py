@@ -1,7 +1,8 @@
 import os
 import logging
 from threading import Thread
-from flask import Flask
+from flask import Flask, request
+from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 from bot_handlers import start_command, handle_message
 
@@ -33,7 +34,12 @@ def main():
     token = os.getenv("TELEGRAM_TOKEN")
     if not token:
         logger.error("Не найден TELEGRAM_TOKEN в переменных окружения!")
-        return
+        return   
+        @app.route(f"/{token}", methods=["POST"])
+    def webhook():
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        application.update_queue.put(update)
+        return "ok", 200
 
     # Создаем приложение бота
     application = ApplicationBuilder().token(token).build()
