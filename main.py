@@ -13,7 +13,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Создаем простой Flask-сервер, чтобы Render не закрывал Web Service по таймауту порта
+# Инициализация Flask-приложения
 app = Flask(__name__)
 
 @app.route("/")
@@ -27,16 +27,16 @@ def run_web():
 def main():
     # Запускаем Flask-сервер в отдельном потоке
     web_thread = Thread(target=run_web)
-   
     web_thread.start()
 
     # Получаем токен из переменных окружения Render
     token = os.getenv("TELEGRAM_TOKEN")
     if not token:
         logger.error("Не найден TELEGRAM_TOKEN в переменных окружения!")
-        return   
-        @app.route(f"/{token}", methods=["POST"])
-        def webhook():
+        return
+
+    @app.route(f"/{token}", methods=["POST"])
+    def webhook():
         update = Update.de_json(request.get_json(force=True), application.bot)
         application.update_queue.put(update)
         return "ok", 200
@@ -49,9 +49,6 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     logger.info("Бот успешно запущен и ожидает сообщения...")
-
-   
-   
 
 if __name__ == "__main__":
     main()
