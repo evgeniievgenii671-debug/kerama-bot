@@ -26,7 +26,7 @@ def run_web():
 def main():
     # Запускаем Flask-сервер в отдельном потоке
     web_thread = Thread(target=run_web)
-    web_thread.daemon = True
+   
     web_thread.start()
 
     # Получаем токен из переменных окружения Render
