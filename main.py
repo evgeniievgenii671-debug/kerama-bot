@@ -36,7 +36,7 @@ def main():
         logger.error("Не найден TELEGRAM_TOKEN в переменных окружения!")
         return   
         @app.route(f"/{token}", methods=["POST"])
-    def webhook():
+        def webhook():
         update = Update.de_json(request.get_json(force=True), application.bot)
         application.update_queue.put(update)
         return "ok", 200
