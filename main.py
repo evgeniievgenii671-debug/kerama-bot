@@ -44,8 +44,8 @@ def main():
 
     logger.info("Бот успешно запущен и ожидает сообщения...")
 
-    # Запуск бота в режиме опроса (polling)
-    application.run_polling()
+   
+   
 
 if __name__ == "__main__":
     main()
