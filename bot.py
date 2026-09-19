@@ -36,7 +36,7 @@ async def main():
         app = web.Application()
         SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
         setup_application(app, dp, bot=bot)
-        web.run_app(app, host="0.0.0.0", port=PORT)
+       web.run_app(app, host="0.0.0.0", port=PORT, loop=asyncio.get_event_loop())
     else:
         # Локально — Polling
         logger.info("Bot started (polling)")
