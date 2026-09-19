@@ -35,12 +35,14 @@ async def main():
         app = web.Application()
         SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
         setup_application(app, dp, bot=bot)
-        web.run_app(
-            app,
-            host="0.0.0.0",
-            port=PORT,
-            loop=asyncio.get_event_loop(),
-        )
+
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
+        await site.start()
+
+        logger.info("Web server started on port %s", PORT)
+        await asyncio.Event().wait()
     else:
         logger.info("Bot started (polling)")
         await bot.delete_webhook(drop_pending_updates=True)
