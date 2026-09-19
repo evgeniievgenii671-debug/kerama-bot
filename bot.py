@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 import os
 
@@ -29,16 +29,19 @@ async def main():
     dp.include_router(text.router)
 
     if WEBHOOK_URL:
-        # Render — Webhook
         await bot.set_webhook(f"{WEBHOOK_URL}{WEBHOOK_PATH}")
         logger.info("Bot started (webhook): %s", WEBHOOK_URL)
 
         app = web.Application()
         SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
         setup_application(app, dp, bot=bot)
-       web.run_app(app, host="0.0.0.0", port=PORT, loop=asyncio.get_event_loop())
+        web.run_app(
+            app,
+            host="0.0.0.0",
+            port=PORT,
+            loop=asyncio.get_event_loop(),
+        )
     else:
-        # Локально — Polling
         logger.info("Bot started (polling)")
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot)
