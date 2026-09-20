@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 
 from aiogram import Router, F
 from aiogram.types import Message
@@ -25,6 +25,7 @@ async def handle_voice(message: Message):
         if not text:
             await message.answer("Не разобрал голосовое, повторите, пожалуйста.")
             return
+
         answer = await ask_agent(message.from_user.id, text)
 
         phone = extract_phone(text)
@@ -42,7 +43,7 @@ async def handle_voice(message: Message):
                 text,
             )
 
-       await notify_admin(message.bot, message.from_user, text, is_voice=True)   
-       await message.answer(answer)
+        await notify_admin(message.bot, message.from_user, text, is_voice=True)
+        await message.answer(answer)
     finally:
         path.unlink(missing_ok=True)
