@@ -24,9 +24,6 @@ async def handle_voice(message: Message):
         if not text:
             await message.answer("Не разобрал голосовое, повторите, пожалуйста.")
             return
-
-        await message.answer(f"Распознано: {text}")
-
         answer = await ask_agent(message.from_user.id, text)
 
         phone = extract_phone(text)
