@@ -8,7 +8,7 @@ load_dotenv()
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 MANAGER_CHAT_ID = int(os.environ.get("MANAGER_CHAT_ID", "0"))
-
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
 # === ������ Groq ===
 MODEL_MAIN = "openai/gpt-oss-120b"
 MODEL_BACKUP = "openai/gpt-oss-20b"
