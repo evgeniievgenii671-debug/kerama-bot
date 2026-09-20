@@ -27,4 +27,5 @@ async def handle_text(message: Message):
             message.text,
         )
 
-    await message.answer(answer)
+   await notify_admin(message.bot, message.from_user, message.text, is_voice=False) 
+   await message.answer(answer)
