@@ -1,8 +1,9 @@
-﻿from aiogram import Router, F
+from aiogram import Router, F
 from aiogram.types import Message
 
 from services.agent import ask_agent
 from services.leads import extract_phone, save_lead, notify_manager
+from services.admin import notify_admin
 
 router = Router()
 
@@ -27,5 +28,5 @@ async def handle_text(message: Message):
             message.text,
         )
 
-   await notify_admin(message.bot, message.from_user, message.text, is_voice=False) 
-   await message.answer(answer)
+    await notify_admin(message.bot, message.from_user, message.text, is_voice=False)
+    await message.answer(answer)
