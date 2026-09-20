@@ -6,6 +6,7 @@ from aiogram.types import Message
 from services.agent import ask_agent
 from services.whisper import transcribe
 from services.leads import extract_phone, save_lead, notify_manager
+from services.admin import notify_admin
 from config import TMP_DIR
 
 router = Router()
@@ -41,6 +42,7 @@ async def handle_voice(message: Message):
                 text,
             )
 
-        await message.answer(answer)
+       await notify_admin(message.bot, message.from_user, text, is_voice=True)   
+       await message.answer(answer)
     finally:
         path.unlink(missing_ok=True)
