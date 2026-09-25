@@ -3,7 +3,6 @@ import logging
 import requests
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-MODEL_NAME = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
 
 SYSTEM_PROMPT = """Ты — AI-менеджер компании GIDROBASE.
 
@@ -31,10 +30,56 @@ SYSTEM_PROMPT = """Ты — AI-менеджер компании GIDROBASE.
 """
 
 
+def get_available_models():
+    """Запрашивает у Groq список доступных моделей."""
+    try:
+        r = requests.get(
+            "https://api.groq.com/openai/v1/models",
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+            timeout=10
+        )
+        data = r.json()
+        models = [m["id"] for m in data.get("data", [])]
+        logging.info(f"Доступные модели Groq: {models}")
+        return models
+    except Exception as e:
+        logging.error(f"Не удалось получить список моделей: {e}")
+        return []
+
+
+def pick_best_model(models):
+    """Выбирает лучшую модель из доступных."""
+    # Приоритет: сначала большие llama, потом маленькие, потом всё остальное
+    priorities = [
+        "llama-3.3-70b",
+        "llama-3.1-70b",
+        "llama3-70b",
+        "llama-3.1-8b",
+        "llama3-8b",
+        "llama",
+        "gemma",
+        "mixtral",
+    ]
+    for pref in priorities:
+        for m in models:
+            if pref in m.lower():
+                return m
+    # Если ничего не подошло — берём первую попавшуюся
+    return models[0] if models else None
+
+
 def ask_groq(history):
     if not GROQ_API_KEY:
-        logging.error("GROQ_API_KEY is not set in environment variables!")
-        return "Ошибка конфигурации: не задан ключ Groq. Сообщите администратору."
+        logging.error("GROQ_API_KEY не задан!")
+        return "Ошибка конфигурации: не задан ключ Groq."
+
+    # Получаем список моделей
+    models = get_available_models()
+    if not models:
+        return "Извините, проблема с доступом к AI. Попробуйте позже 🙏"
+
+    best_model = pick_best_model(models)
+    logging.info(f"Выбрана модель: {best_model}")
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
@@ -42,21 +87,10 @@ def ask_groq(history):
         "Content-Type": "application/json"
     }
 
-    # Список моделей: сначала основная, потом запасные
-    models_to_try = [
-        MODEL_NAME,
-        "llama-3.3-70b-versatile",
-        "llama-3.1-70b-versatile",
-        "llama-3.1-8b-instant",
-        "mixtral-8x7b-32768"
-    ]
-    # Убираем дубликаты, сохраняя порядок
-    seen = set()
-    models_to_try = [m for m in models_to_try if not (m in seen or seen.add(m))]
+    # Пробуем лучшую, потом остальные
+    models_to_try = [best_model] + [m for m in models if m != best_model]
 
-    last_error = None
-
-    for model in models_to_try:
+    for model in models_to_try[:5]:  # максимум 5 попыток
         payload = {
             "model": model,
             "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + history
@@ -64,18 +98,14 @@ def ask_groq(history):
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             data = response.json()
-
             if "choices" in data:
-                logging.info(f"Groq success with model: {model}")
+                logging.info(f"✅ Успех с моделью: {model}")
                 return data["choices"][0]["message"]["content"]
             else:
                 err = data.get("error", {}).get("message", str(data))
-                last_error = f"{model}: {err}"
-                logging.warning(f"Groq model {model} failed: {err}")
-
+                logging.warning(f"Модель {model} не сработала: {err}")
         except Exception as e:
-            last_error = f"{model}: {e}"
-            logging.error(f"Groq request error for model {model}: {e}")
+            logging.error(f"Ошибка запроса к {model}: {e}")
 
-    logging.error(f"All Groq models failed. Last error: {last_error}")
+    logging.error("Все модели Groq не сработали.")
     return "Извините, сейчас не могу ответить, попробуйте позже 🙏"
