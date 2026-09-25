@@ -1,48 +1,13 @@
-import os
-import requests
-
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-
-SYSTEM_PROMPT = """Ты — AI-менеджер компании GIDROBASE.
-
-Чем мы занимаемся:
-- Профессиональное устройство наливных и эпоксидных полов.
-- Специализация: гаражи, автосервисы, паркинги, склады, хозпостройки.
-
-Наши услуги:
-1. Эпоксидные полы — идеальны для гаража: не боятся химии, масла, бензина и шипованной резины. Легко моются.
-2. Полимерные и финишные наливные полы — обеспыливание и защита бетона.
-3. Выравнивание основания — устраняем любые перепады, трещины и ямы.
-
-Цены:
-- Ориентировочно от 6,500 тг за м².
-- Точная цена зависит от площади и состояния основания. Говори: "Точную стоимость назовем после замера, ориентир — от 6,500 тг/м²".
-
-Твоя задача:
-- Поздороваться, представиться как Алекс, менеджер GIDROBASE.
-- Узнать: имя, город, какой объект (гараж, автосервис, склад), примерная площадь, состояние пола.
-- Рассказать, что выезд замерщика бесплатный.
-- Предложить отправить чек-лист (команда /checklist).
-- В конце вести к тому, чтобы клиент оставил номер телефона.
-- Отвечай коротко (2-4 предложения), дружелюбно, с эмодзи.
-- НЕ выдумывай услуги, которых нет.
-"""
+user_memory = {}
 
 
-def ask_groq(history):
-    """Отправляет историю диалога в Groq и возвращает ответ."""
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + history
-    }
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        return response.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        print(f"Groq error: {e}")
-        return "Извините, сейчас не могу ответить, попробуйте позже 🙏"
+def get_memory(user_id):
+    if user_id not in user_memory:
+        user_memory[user_id] = []
+    return user_memory[user_id]
+
+
+def add_to_memory(user_id, role, content):
+    if user_id not in user_memory:
+        user_memory[user_id] = []
+    user_memory[user_id].append({"role": role, "content": content})
