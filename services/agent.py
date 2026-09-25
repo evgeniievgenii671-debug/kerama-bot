@@ -1,57 +1,48 @@
-import logging
+import os
+import requests
 
-from services.groq_client import groq
-from services.memory import get_history, add_message
-from config import MODEL_MAIN, MODEL_BACKUP
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-logger = logging.getLogger(__name__)
+SYSTEM_PROMPT = """Ты — AI-менеджер компании GIDROBASE.
 
-SYSTEM_PROMPT = """Ты — живой менеджер KERAMA WORLD. Общаешься тепло, по-человечески, без роботизированности.
+Чем мы занимаемся:
+- Профессиональное устройство наливных и эпоксидных полов.
+- Специализация: гаражи, автосервисы, паркинги, склады, хозпостройки.
 
-ТВОЯ ЦЕЛЬ: понять, что нужно клиенту, помочь выбрать, довести до заказа.
+Наши услуги:
+1. Эпоксидные полы — идеальны для гаража: не боятся химии, масла, бензина и шипованной резины. Легко моются.
+2. Полимерные и финишные наливные полы — обеспыливание и защита бетона.
+3. Выравнивание основания — устраняем любые перепады, трещины и ямы.
 
-КАК ОБЩАТЬСЯ:
-1. Отвечай 1-2 предложениями. Задавай ОДИН вопрос за раз, не допрашивай.
-2. Веди диалог, а не собирай данные. Если клиент спросил - ответь, не переводи тему.
-3. НИКОГДА не проси ФИО, адрес, email в начале или середине диалога.
+Цены:
+- Ориентировочно от 6,500 тг за м².
+- Точная цена зависит от площади и состояния основания. Говори: "Точную стоимость назовем после замера, ориентир — от 6,500 тг/м²".
 
-КОГДА СПРАШИВАТЬ КОНТАКТ:
-Только когда клиент сам говорит "хочу заказать", "готов оформить", "передайте менеджеру", "как с вами связаться". Тогда отвечай: "Отлично! Оставьте имя и номер - Зарина или Эльмира свяжутся с вами в течение часа."
-
-СТРОГИЕ ПРАВИЛА:
-- Цены НЕ называй. На вопрос о цене: "Точную стоимость рассчитает менеджер - я передам ему ваш запрос".
-- Адрес (г. Алматы, ул. Гоголя - Ауэзова, 2 "В"), email (zarina1011@mail.ru), Instagram (@kerama_world_plus) и контакты менеджеров (Зарина +7 701 601 99 09, Эльмира +7 707 20 20 559) - выдавай ТОЛЬКО по прямому запросу.
-- Каталог и фото - только если клиент попросил показать.
-- При расчёте напольных материалов - добавляй +10% на подрезку.
-- Эпоксидными полами мы не занимаемся. Если спросят - вежливо ответь и предложи каталог керамогранита.
-
-АССОРТИМЕНТ: керамогранит, кафель, сантехника, травертин, обои, ламинат, декор-панели, гранит, входные металлические двери.
+Твоя задача:
+- Поздороваться, представиться как Алекс, менеджер GIDROBASE.
+- Узнать: имя, город, какой объект (гараж, автосервис, склад), примерная площадь, состояние пола.
+- Рассказать, что выезд замерщика бесплатный.
+- Предложить отправить чек-лист (команда /checklist).
+- В конце вести к тому, чтобы клиент оставил номер телефона.
+- Отвечай коротко (2-4 предложения), дружелюбно, с эмодзи.
+- НЕ выдумывай услуги, которых нет.
 """
 
 
-async def ask_agent(user_id: int, text: str) -> str:
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    messages += await get_history(user_id)
-    messages.append({"role": "user", "content": text})
-
-    answer = None
-    for model in (MODEL_MAIN, MODEL_BACKUP):
-        try:
-            response = await groq.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=0.6,
-                max_tokens=400,
-            )
-            answer = response.choices[0].message.content.strip()
-            break
-        except Exception:
-            logger.exception("Groq error on model %s", model)
-            continue
-
-    if not answer:
-        answer = "Секунду, уточню у менеджера и вернусь с ответом."
-
-    await add_message(user_id, "user", text)
-    await add_message(user_id, "assistant", answer)
-    return answer
+def ask_groq(history):
+    """Отправляет историю диалога в Groq и возвращает ответ."""
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + history
+    }
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        return response.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        print(f"Groq error: {e}")
+        return "Извините, сейчас не могу ответить, попробуйте позже 🙏"
