@@ -30,7 +30,6 @@ SYSTEM_PROMPT = """Ты — AI-менеджер компании GIDROBASE.
 
 
 def ask_groq(history):
-    """Отправляет историю диалога в Groq и возвращает ответ."""
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
