@@ -1,5 +1,8 @@
 import os
 import logging
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.types import ParseMode
@@ -10,6 +13,7 @@ from services.memory import get_memory, add_to_memory
 
 load_dotenv()
 
+# ============ НАСТРОЙКИ ============
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
 
@@ -23,7 +27,7 @@ dp.middleware.setup(LoggingMiddleware())
 # ============ /start ============
 @dp.message_handler(commands=["start"])
 async def cmd_start(message: types.Message):
-    get_memory(message.from_user.id)  # создаём память
+    get_memory(message.from_user.id)
     text = (
         "👋 Здравствуйте! Меня зовут Алекс, я менеджер компании <b>GIDROBASE</b>.\n\n"
         "Мы профессионально делаем эпоксидные и наливные полы:\n"
@@ -60,6 +64,7 @@ async def cmd_demo(message: types.Message):
     # Раскомментируй, когда положишь файлы в папку с ботом:
     # await bot.send_photo(message.from_user.id, photo=open("demo_garage.jpg", "rb"), caption="Эпоксидный пол в гараже 🚗")
     # await bot.send_photo(message.from_user.id, photo=open("demo_service.jpg", "rb"), caption="Пол в автосервисе 🔧")
+    # await bot.send_video(message.from_user.id, video=open("demo_process.mp4", "rb"), caption="Процесс заливки 🎬")
 
 
 # ============ ОБРАБОТКА ТЕКСТА ============
@@ -91,7 +96,30 @@ async def handle_message(message: types.Message):
             logging.error(f"Admin notify error: {e}")
 
 
+# ============ HEALTH-CHECK СЕРВЕР ДЛЯ RENDER ============
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"GIDROBASE bot is running!")
+
+    def log_message(self, format, *args):
+        pass  # не спамим логи
+
+
+def run_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    logging.info(f"Health server running on port {port}")
+    server.serve_forever()
+
+
 # ============ ЗАПУСК ============
 if __name__ == "__main__":
+    # Health-check в фоне (чтобы Render видел открытый порт)
+    threading.Thread(target=run_health_server, daemon=True).start()
+
+    # Telegram-бот в основном потоке
     from aiogram import executor
     executor.start_polling(dp, skip_updates=True)
