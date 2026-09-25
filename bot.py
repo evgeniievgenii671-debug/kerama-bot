@@ -30,7 +30,7 @@ async def cmd_start(message: types.Message):
     get_memory(message.from_user.id)
     text = (
         "👋 Здравствуйте! Меня зовут Алекс, я менеджер компании <b>GIDROBASE</b>.\n\n"
-        "Мы профессионально делаем эпоксидные и наливные полы:\n"
+        "Мы делаем эпоксидные и наливные полы:\n"
         "✅ Гаражи, автосервисы, паркинги\n"
         "✅ Склады, хозпостройки\n"
         "✅ Выравнивание основания\n\n"
@@ -60,11 +60,71 @@ async def cmd_checklist(message: types.Message):
 # ============ /demo ============
 @dp.message_handler(commands=["demo"])
 async def cmd_demo(message: types.Message):
-    await message.answer("📸 Сейчас пришлю примеры наших работ...")
-    # Раскомментируй, когда положишь файлы в папку с ботом:
-    # await bot.send_photo(message.from_user.id, photo=open("demo_garage.jpg", "rb"), caption="Эпоксидный пол в гараже 🚗")
-    # await bot.send_photo(message.from_user.id, photo=open("demo_service.jpg", "rb"), caption="Пол в автосервисе 🔧")
-    # await bot.send_video(message.from_user.id, video=open("demo_process.mp4", "rb"), caption="Процесс заливки 🎬")
+    await message.answer("📸 Смотрите наши работы:")
+
+    # 5 фото
+    photos = [
+        ("demo/demo1.jpg", "Эпоксидный пол в гараже 🚗"),
+        ("demo/demo2.jpg", "Пол в автосервисе 🔧"),
+        ("demo/demo3.jpg", "До и после ✨"),
+        ("demo/demo4.jpg", "Крупный план — как зеркало 🪞"),
+        ("demo/demo5.jpg", "Процесс заливки 🎬"),
+    ]
+    for path, caption in photos:
+        try:
+            await bot.send_photo(message.from_user.id, photo=open(path, "rb"), caption=caption)
+        except Exception as e:
+            logging.error(f"Ошибка фото {path}: {e}")
+
+    # Видео
+    try:
+        await bot.send_video(
+            message.from_user.id,
+            video=open("demo/demo.mp4", "rb"),
+            caption="Видео процесса заливки 🎥"
+        )
+    except Exception as e:
+        logging.error(f"Ошибка видео: {e}")
+
+    # Финальное сообщение
+    await message.answer(
+        "📋 Хотите такой же пол? Отправьте /checklist — "
+        "я пришлю список того, что нужно подготовить.\n\n"
+        "Или сразу оставьте номер телефона — замерщик свяжется 👍"
+    )
+
+
+# ============ АДМИН-КОМАНДЫ ============
+def is_admin(message):
+    return message.from_user.id == ADMIN_ID
+
+@dp.message_handler(commands=["clear"])
+async def cmd_clear(message: types.Message):
+    if not is_admin(message):
+        return
+    from services.memory import user_memory
+    user_memory.clear()
+    await message.answer("🧹 Память всех клиентов очищена!")
+
+@dp.message_handler(commands=["stats"])
+async def cmd_stats(message: types.Message):
+    if not is_admin(message):
+        return
+    from services.memory import user_memory
+    await message.answer(f"📊 Активных диалогов: {len(user_memory)}")
+
+@dp.message_handler(commands=["help"])
+async def cmd_help(message: types.Message):
+    text = (
+        "🤖 <b>Команды:</b>\n\n"
+        "/start — начать\n"
+        "/checklist — чек-лист\n"
+        "/demo — примеры работ\n\n"
+        "<b>Админ:</b>\n"
+        "/clear — очистить память\n"
+        "/stats — статистика"
+    )
+    await message.answer(text)
 
 
 # ============ ОБРАБОТКА ТЕКСТА ============
@@ -81,7 +141,6 @@ async def handle_message(message: types.Message):
 
     await message.answer(ai_text)
 
-    # Уведомление админу
     if ADMIN_ID:
         try:
             await bot.send_message(
@@ -96,7 +155,7 @@ async def handle_message(message: types.Message):
             logging.error(f"Admin notify error: {e}")
 
 
-# ============ HEALTH-CHECK СЕРВЕР ДЛЯ RENDER ============
+# ============ HEALTH-CHECK ДЛЯ RENDER ============
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -105,7 +164,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"GIDROBASE bot is running!")
 
     def log_message(self, format, *args):
-        pass  # не спамим логи
+        pass
 
 
 def run_health_server():
@@ -117,9 +176,7 @@ def run_health_server():
 
 # ============ ЗАПУСК ============
 if __name__ == "__main__":
-    # Health-check в фоне (чтобы Render видел открытый порт)
     threading.Thread(target=run_health_server, daemon=True).start()
 
-    # Telegram-бот в основном потоке
     from aiogram import executor
     executor.start_polling(dp, skip_updates=True)
