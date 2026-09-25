@@ -1,7 +1,9 @@
 import os
+import logging
 import requests
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+MODEL_NAME = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
 
 SYSTEM_PROMPT = """Ты — AI-менеджер компании GIDROBASE.
 
@@ -30,18 +32,50 @@ SYSTEM_PROMPT = """Ты — AI-менеджер компании GIDROBASE.
 
 
 def ask_groq(history):
+    if not GROQ_API_KEY:
+        logging.error("GROQ_API_KEY is not set in environment variables!")
+        return "Ошибка конфигурации: не задан ключ Groq. Сообщите администратору."
+
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + history
-    }
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        return response.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        print(f"Groq error: {e}")
-        return "Извините, сейчас не могу ответить, попробуйте позже 🙏"
+
+    # Список моделей: сначала основная, потом запасные
+    models_to_try = [
+        MODEL_NAME,
+        "llama-3.3-70b-versatile",
+        "llama-3.1-70b-versatile",
+        "llama-3.1-8b-instant",
+        "mixtral-8x7b-32768"
+    ]
+    # Убираем дубликаты, сохраняя порядок
+    seen = set()
+    models_to_try = [m for m in models_to_try if not (m in seen or seen.add(m))]
+
+    last_error = None
+
+    for model in models_to_try:
+        payload = {
+            "model": model,
+            "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + history
+        }
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            data = response.json()
+
+            if "choices" in data:
+                logging.info(f"Groq success with model: {model}")
+                return data["choices"][0]["message"]["content"]
+            else:
+                err = data.get("error", {}).get("message", str(data))
+                last_error = f"{model}: {err}"
+                logging.warning(f"Groq model {model} failed: {err}")
+
+        except Exception as e:
+            last_error = f"{model}: {e}"
+            logging.error(f"Groq request error for model {model}: {e}")
+
+    logging.error(f"All Groq models failed. Last error: {last_error}")
+    return "Извините, сейчас не могу ответить, попробуйте позже 🙏"
