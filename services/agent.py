@@ -4,61 +4,54 @@ import requests
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-SYSTEM_PROMPT = """Ты — Алекс, менеджер GIDROBASE.
-Превращаем бетон в идеальный пол.
-Шлифуем ➔ Ровняем ➔ Заливаем прочную эпоксидку.
-Гаражи, магазины, склады под ключ.
-Услуги: гаражи, автосервисы, паркинги, склады. Выравнивание основания.
+SYSTEM_PROMPT = """Ты — Алекс, менеджер GIDROBASE. Продаём эпоксидные и наливные полы.
+
+Услуги: гаражи, автосервисы, паркинги, склады, хозпостройки.
 Цена: от 6500 тг/м². Точную — после бесплатного замера.
 
-ЖЁСТКИЕ ПРАВИЛА:
-- МАКСИМУМ 1-2 предложения за раз. Не больше!
+ТВОЯ ЗАДАЧА — вести диалог и заполнить карточку клиента:
+1. Имя
+2. Объект (гараж/автосервис/склад)
+3. Город
+4. Площадь
+5. Состояние пола
+6. Телефон
+
+ПРАВИЛА:
+- МАКСИМУМ 1-2 предложения за раз.
 - Задавай ТОЛЬКО ОДИН вопрос за сообщение.
-- Не перечисляй всё сразу.
-- Не повторяй то, что уже спросил.
+- Используй то, что клиент уже сказал (не переспрашивай имя).
+- Если клиент просит фото/примеры — скажи: "Сейчас пришлю примеры" (бот сам отправит).
+- Не выдумывай услуги.
+- Веди к номеру телефона.
 
-Порядок диалога (по одному вопросу):
-1. Какой объект?
-2. Какой город?
-3. Какая площадь?
-4. Оставь номер телефона.
+Порядок (по одному вопросу):
+имя → объект → город → площадь → телефон
 
-Примеры ответов:
-- «Отлично! А какой город? 📍»
+Примеры:
+- «Приятно познакомиться, Евгений! Какой у вас объект? 🏠»
+- «Отлично! А в каком вы городе? 📍»
 - «Понял! Сколько примерно м²?»
-- «Супер! Оставь номер — замерщик свяжется 👍»
+- «Супер! Оставьте номер — замерщик свяжется 👍»
 """
 
 
 def get_available_models():
-    """Запрашивает у Groq список доступных моделей."""
     try:
         r = requests.get(
             "https://api.groq.com/openai/v1/models",
             headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
             timeout=10
         )
-        data = r.json()
-        models = [m["id"] for m in data.get("data", [])]
-        logging.info(f"Доступные модели Groq: {models}")
-        return models
+        return [m["id"] for m in r.json().get("data", [])]
     except Exception as e:
-        logging.error(f"Не удалось получить список моделей: {e}")
+        logging.error(f"Ошибка списка моделей: {e}")
         return []
 
 
 def pick_best_model(models):
-    """Выбирает лучшую модель из доступных."""
-    priorities = [
-        "llama-3.3-70b",
-        "llama-3.1-70b",
-        "llama3-70b",
-        "llama-3.1-8b",
-        "llama3-8b",
-        "llama",
-        "gemma",
-        "mixtral",
-    ]
+    priorities = ["llama-3.3-70b", "llama-3.1-70b", "llama3-70b",
+                  "llama-3.1-8b", "llama3-8b", "llama", "gemma", "mixtral"]
     for pref in priorities:
         for m in models:
             if pref in m.lower():
@@ -67,42 +60,32 @@ def pick_best_model(models):
 
 
 def ask_groq(history):
-    """Отправляет историю диалога в Groq и возвращает ответ."""
     if not GROQ_API_KEY:
-        logging.error("GROQ_API_KEY не задан!")
-        return "Ошибка конфигурации: не задан ключ Groq."
+        return "Ошибка конфигурации."
 
     models = get_available_models()
     if not models:
-        return "Извините, проблема с доступом к AI. Попробуйте позже 🙏"
+        return "Проблема с AI. Попробуйте позже 🙏"
 
-    best_model = pick_best_model(models)
-    logging.info(f"Выбрана модель: {best_model}")
-
+    best = pick_best_model(models)
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
 
-    models_to_try = [best_model] + [m for m in models if m != best_model]
-
-    for model in models_to_try[:5]:
+    for model in [best] + [m for m in models if m != best][:4]:
         payload = {
             "model": model,
             "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + history
         }
         try:
-            response = requests.post(url, json=payload, headers=headers, timeout=30)
-            data = response.json()
+            r = requests.post(url, json=payload, headers=headers, timeout=30)
+            data = r.json()
             if "choices" in data:
-                logging.info(f"✅ Успех с моделью: {model}")
+                logging.info(f"✅ {model}")
                 return data["choices"][0]["message"]["content"]
-            else:
-                err = data.get("error", {}).get("message", str(data))
-                logging.warning(f"Модель {model} не сработала: {err}")
         except Exception as e:
-            logging.error(f"Ошибка запроса к {model}: {e}")
+            logging.error(f"Ошибка {model}: {e}")
 
-    logging.error("Все модели Groq не сработали.")
-    return "Извините, сейчас не могу ответить, попробуйте позже 🙏"
+    return "Извините, сейчас не могу ответить 🙏"
