@@ -26,21 +26,31 @@ dp.middleware.setup(LoggingMiddleware())
 DEMO_FILE = "demo_data.json"
 
 def load_demo():
-    """Загружает список демо-материалов."""
     if os.path.exists(DEMO_FILE):
         with open(DEMO_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return {"photos": [], "videos": []}
 
 def save_demo(data):
-    """Сохраняет список демо-материалов."""
     with open(DEMO_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 demo_data = load_demo()
-
-# Режим добавления (только для админа)
 adding_mode = {"active": False}
+
+# ============ КЛЮЧЕВЫЕ СЛОВА ДЛЯ ДЕМО ============
+DEMO_KEYWORDS = [
+    "фото", "фотки", "фотографии", "фотка", "снимки",
+    "видео", "видик", "ролик", "запись",
+    "пример", "примеры", "работы", "покажи", "показать",
+    "скинь", "скинуть", "пришли", "прислать", "отправь",
+    "демо", "образец", "образцы", "портфолио", "кейс"
+]
+
+def is_demo_request(text):
+    """Проверяет, просит ли клиент показать примеры работ."""
+    text_lower = text.lower()
+    return any(kw in text_lower for kw in DEMO_KEYWORDS)
 
 
 # ============ /start ============
@@ -74,19 +84,19 @@ async def cmd_checklist(message: types.Message):
     await message.answer(text)
 
 
-# ============ /demo — показывает все материалы ============
-@dp.message_handler(commands=["demo"])
-async def cmd_demo(message: types.Message):
+# ============ ФУНКЦИЯ ОТПРАВКИ ДЕМО ============
+async def send_demo(chat_id):
+    """Отправляет все демо-материалы клиенту."""
     if not demo_data["photos"] and not demo_data["videos"]:
-        await message.answer("📸 Демо-материалы пока не добавлены. Менеджер скоро их загрузит!")
+        await bot.send_message(chat_id, "📸 Демо-материалы пока не добавлены.")
         return
 
-    await message.answer("📸 Смотрите наши работы:")
+    await bot.send_message(chat_id, "📸 Вот примеры наших работ:")
 
     for photo in demo_data["photos"]:
         try:
             await bot.send_photo(
-                message.from_user.id,
+                chat_id,
                 photo=photo["file_id"],
                 caption=photo.get("caption", "")
             )
@@ -96,28 +106,23 @@ async def cmd_demo(message: types.Message):
     for video in demo_data["videos"]:
         try:
             await bot.send_video(
-                message.from_user.id,
+                chat_id,
                 video=video["file_id"],
                 caption=video.get("caption", "")
             )
         except Exception as e:
             logging.error(f"Ошибка видео: {e}")
 
-    final_msg = await message.answer(
-        "📋 Хотите такой же пол?\n\n"
-        "Отправьте /checklist — пришлю список подготовки.\n"
-        "Или оставьте номер телефона — замерщик свяжется 👍"
-    )
 
-    # Закрепляем призыв в чате клиента
-    try:
-        await bot.pin_chat_message(
-            chat_id=message.from_user.id,
-            message_id=final_msg.message_id,
-            disable_notification=True
-        )
-    except Exception as e:
-        logging.error(f"Не удалось закрепить: {e}")
+# ============ /demo ============
+@dp.message_handler(commands=["demo"])
+async def cmd_demo(message: types.Message):
+    await send_demo(message.from_user.id)
+    await message.answer(
+        "📋 Хотите такой же пол? Отправьте /checklist — "
+        "я пришлю список подготовки.\n\n"
+        "Или оставьте номер — замерщик свяжется 👍"
+    )
 
 
 # ============ АДМИН: добавление демо ============
@@ -132,8 +137,7 @@ async def cmd_add_demo(message: types.Message):
     adding_mode["active"] = True
     await message.answer(
         "✅ Режим добавления включён.\n\n"
-        "Теперь отправляй мне фото и видео — они будут сохраняться.\n"
-        "Каждое фото/видео можно подписать — подпись станет описанием.\n\n"
+        "Отправляй фото и видео (можно с подписью — она станет описанием).\n"
         "Когда закончишь — отправь /stop_demo"
     )
 
@@ -144,8 +148,7 @@ async def cmd_stop_demo(message: types.Message):
         return
     adding_mode["active"] = False
     await message.answer(
-        f"⏹ Режим добавления выключен.\n\n"
-        f"📊 Сохранено:\n"
+        f"⏹ Добавление выключено.\n\n"
         f"📸 Фото: {len(demo_data['photos'])}\n"
         f"🎥 Видео: {len(demo_data['videos'])}"
     )
@@ -156,8 +159,7 @@ async def cmd_show_list(message: types.Message):
     if not is_admin(message):
         return
     await message.answer(
-        f"📊 <b>Демо-материалы:</b>\n\n"
-        f"📸 Фото: {len(demo_data['photos'])}\n"
+        f"📊 Фото: {len(demo_data['photos'])}\n"
         f"🎥 Видео: {len(demo_data['videos'])}"
     )
 
@@ -172,19 +174,18 @@ async def cmd_clear_demo(message: types.Message):
     await message.answer("🗑 Все демо-материалы удалены.")
 
 
-# ============ ПРИЁМ ФОТО И ВИДЕО В РЕЖИМЕ ДОБАВЛЕНИЯ ============
+# ============ ПРИЁМ ФОТО/ВИДЕО ============
 @dp.message_handler(content_types=["photo"])
 async def handle_photo(message: types.Message):
     if not adding_mode["active"] or not is_admin(message):
         return
-    # Берём самое большое разрешение
     file_id = message.photo[-1].file_id
     demo_data["photos"].append({
         "file_id": file_id,
         "caption": message.caption or ""
     })
     save_demo(demo_data)
-    await message.answer(f"✅ Фото сохранено ({len(demo_data['photos'])} всего)")
+    await message.answer(f"✅ Фото сохранено ({len(demo_data['photos'])} шт.)")
 
 
 @dp.message_handler(content_types=["video"])
@@ -197,47 +198,13 @@ async def handle_video(message: types.Message):
         "caption": message.caption or ""
     })
     save_demo(demo_data)
-    await message.answer(f"✅ Видео сохранено ({len(demo_data['videos'])} всего)")
+    await message.answer(f"✅ Видео сохранено ({len(demo_data['videos'])} шт.)")
 
 
-# ============ АДМИН: очистка памяти, статистика, help ============
-@dp.message_handler(commands=["clear"])
-async def cmd_clear(message: types.Message):
-    if not is_admin(message):
-        return
-    user_memory.clear()
-    await message.answer("🧹 Память всех клиентов очищена!")
-
-
-@dp.message_handler(commands=["stats"])
-async def cmd_stats(message: types.Message):
-    if not is_admin(message):
-        return
-    await message.answer(f"📊 Активных диалогов: {len(user_memory)}")
-
-
-@dp.message_handler(commands=["help"])
-async def cmd_help(message: types.Message):
-    text = (
-        "🤖 <b>Команды:</b>\n\n"
-        "/start — начать\n"
-        "/checklist — чек-лист\n"
-        "/demo — примеры работ\n\n"
-        "<b>Для админа:</b>\n"
-        "/add_demo — добавить материалы\n"
-        "/stop_demo — закончить добавление\n"
-        "/show_list — список материалов\n"
-        "/clear_demo — удалить все материалы\n"
-        "/clear — очистить память\n"
-        "/stats — статистика"
-    )
-    await message.answer(text)
-
-
-# ============ ОБРАБОТКА ТЕКСТА (AI) ============
+# ============ ОБРАБОТКА ТЕКСТА ============
 @dp.message_handler(content_types=["text"])
 async def handle_message(message: types.Message):
-    # Игнорируем команды (они уже обработаны выше)
+    # Игнорируем команды
     if message.text.startswith("/"):
         return
 
@@ -245,13 +212,26 @@ async def handle_message(message: types.Message):
     user_text = message.text
 
     add_to_memory(user_id, "user", user_text)
-    history = get_memory(user_id)[-10:]
 
+    # Проверяем: клиент просит демо?
+    if is_demo_request(user_text):
+        await send_demo(user_id)
+        # Добавляем в память, что показали демо
+        add_to_memory(user_id, "assistant", "[Показал примеры работ]")
+        await message.answer(
+            "📋 Понравилось? Давайте подберём решение под ваш объект.\n\n"
+            "Подскажите, какой у вас объект? 🏠"
+        )
+        return
+
+    # Обычный диалог через Groq
+    history = get_memory(user_id)[-10:]
     ai_text = ask_groq(history)
     add_to_memory(user_id, "assistant", ai_text)
 
     await message.answer(ai_text)
 
+    # Уведомление админу
     if ADMIN_ID:
         try:
             await bot.send_message(
@@ -263,10 +243,10 @@ async def handle_message(message: types.Message):
                 f"Бот ответил: {ai_text[:200]}..."
             )
         except Exception as e:
-            logging.error(f"Admin notify error: {e}")
+            logging.error(f"Admin notify: {e}")
 
 
-# ============ HEALTH-CHECK ДЛЯ RENDER ============
+# ============ HEALTH-CHECK ============
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -281,7 +261,7 @@ class HealthHandler(BaseHTTPRequestHandler):
 def run_health_server():
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    logging.info(f"Health server running on port {port}")
+    logging.info(f"Health server on port {port}")
     server.serve_forever()
 
 
