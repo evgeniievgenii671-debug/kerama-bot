@@ -16,7 +16,6 @@ load_dotenv()
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
-# Несколько админов через запятую
 ADMIN_IDS_RAW = os.environ.get("ADMIN_IDS", os.environ.get("ADMIN_ID", "0"))
 ADMIN_IDS = [int(x.strip()) for x in ADMIN_IDS_RAW.split(",") if x.strip().isdigit()]
 
@@ -57,12 +56,10 @@ def is_demo_request(text):
 
 
 def is_phone_message(text):
-    """Проверяет, есть ли в сообщении номер телефона."""
-    # Ищем +7, 8, 7 с последующими цифрами или длинную последовательность цифр
     patterns = [
         r"\+7[\s\-\(\)]?\d{3}[\s\-\(\)]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}",
         r"8[\s\-\(\)]?\d{3}[\s\-\(\)]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}",
-        r"\d{10,11}",  # просто 10-11 цифр подряд
+        r"\d{10,11}",
     ]
     for p in patterns:
         if re.search(p, text):
@@ -70,9 +67,8 @@ def is_phone_message(text):
     return False
 
 
-# ============ УВЕДОМЛЕНИЕ ВСЕМ АДМИНАМ ============
+# ============ УВЕДОМЛЕНИЯ ============
 async def notify_admins(text):
-    """Рассылает уведомление всем админам."""
     for admin_id in ADMIN_IDS:
         if admin_id == 0:
             continue
@@ -87,12 +83,12 @@ async def notify_admins(text):
 async def cmd_start(message: types.Message):
     get_memory(message.from_user.id)
     text = (
-        "👋 Здравствуйте! Меня зовут Алекс, я менеджер компании <b>GIDROBASE</b>.\n\n"
-        "Мы делаем эпоксидные и наливные полы:\n"
-        "✅ Гаражи, автосервисы, паркинги\n"
-        "✅ Склады, хозпостройки\n"
-        "✅ Выравнивание основания\n\n"
-        "Подскажите, какой у вас объект? 🏠"
+        "👋 Здравствуйте! Меня зовут Алекс, я менеджер компании <b>GidroBase</b>.\n\n"
+        "Мы занимаемся в Алматы и области:\n"
+        "✅ Гидроизоляция кровель (наплавляемая, обмазочная, ремонт)\n"
+        "✅ Полимерные и бетонные полы (эпоксид, полиуретан, 3D)\n\n"
+        "Опыт 10+ лет. Гарантия до 10 лет. Выезд инженера — бесплатно.\n\n"
+        "Что вас интересует — кровля или полы? 🏠"
     )
     await message.answer(text)
 
@@ -101,14 +97,19 @@ async def cmd_start(message: types.Message):
 @dp.message_handler(commands=["checklist"])
 async def cmd_checklist(message: types.Message):
     text = (
-        "📋 <b>Чек-лист: готов ли ваш пол к заливке?</b>\n\n"
-        "1️⃣ <b>Площадь</b> — сколько м²?\n"
-        "2️⃣ <b>Основание</b> — бетон, стяжка или старое покрытие?\n"
-        "3️⃣ <b>Состояние</b> — трещины, ямы, масляные пятна?\n"
-        "4️⃣ <b>Влажность</b> — не более 4%\n"
-        "5️⃣ <b>Температура</b> — +15…+25°C\n"
-        "6️⃣ <b>Сроки</b> — когда планируете?\n\n"
-        "💡 <b>Выезд замерщика бесплатный</b> — оставьте номер 👇"
+        "📋 <b>Чек-лист для подготовки к замеру</b>\n\n"
+        "🏠 <b>Для кровли:</b>\n"
+        "1. Тип кровли (плоская/скатная)\n"
+        "2. Площадь (м²)\n"
+        "3. Состояние (протечки, трещины)\n"
+        "4. Тип здания (ЖК, склад, ТРЦ, дом)\n\n"
+        "🧱 <b>Для полов:</b>\n"
+        "1. Площадь (м²)\n"
+        "2. Основание (бетон, стяжка)\n"
+        "3. Состояние (трещины, ямы)\n"
+        "4. Тип пола (эпоксид, полиуретан, бетон)\n\n"
+        "💡 <b>Выезд инженера — бесплатно.</b>\n"
+        "Оставьте номер телефона, и мы свяжемся 👇"
     )
     await message.answer(text)
 
@@ -136,8 +137,8 @@ async def send_demo(chat_id):
 async def cmd_demo(message: types.Message):
     await send_demo(message.from_user.id)
     await message.answer(
-        "📋 Хотите такой же пол? Отправьте /checklist.\n"
-        "Или оставьте номер — замерщик свяжется 👍"
+        "📋 Хотите такой же результат? Отправьте /checklist.\n"
+        "Или оставьте номер — инженер свяжется 👍"
     )
 
 
@@ -246,10 +247,8 @@ async def handle_message(message: types.Message):
 
     add_to_memory(user_id, "user", user_text)
 
-    # Проверка: заявка (номер телефона)
     phone_detected = is_phone_message(user_text)
 
-    # Уведомление всем админам
     if phone_detected:
         await notify_admins(
             f"🔥 <b>НОВАЯ ЗАЯВКА!</b>\n\n"
@@ -260,13 +259,12 @@ async def handle_message(message: types.Message):
             f"⚡ <b>Свяжитесь с клиентом срочно!</b>"
         )
 
-    # Демо-запрос?
     if is_demo_request(user_text):
         await send_demo(user_id)
         add_to_memory(user_id, "assistant", "[Показал примеры работ]")
         await message.answer(
             "📋 Понравилось? Давайте подберём под ваш объект.\n\n"
-            "Какой у вас объект? 🏠"
+            "Что вас интересует — кровля или полы? 🏠"
         )
         if not phone_detected:
             await notify_admins(
@@ -278,7 +276,6 @@ async def handle_message(message: types.Message):
             )
         return
 
-    # Обычный диалог
     history = get_memory(user_id)[-10:]
     ai_text = ask_groq(history)
     add_to_memory(user_id, "assistant", ai_text)
@@ -301,7 +298,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"GIDROBASE bot is running!")
+        self.wfile.write(b"GidroBase bot is running!")
 
     def log_message(self, format, *args):
         pass
