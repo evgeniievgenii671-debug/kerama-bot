@@ -279,7 +279,7 @@ async def handle_message(message: types.Message):
         return
 
     history = get_memory(user_id)[-10:]
-    ai_text = ask_groq(history)
+    ai_text = await ask_groq(history)
     add_to_memory(user_id, "assistant", ai_text)
 
     await message.answer(ai_text)
