@@ -96,7 +96,7 @@ def sort_by_priority(models: list) -> list:
     return result
 
 
-async def ask_agent(user_id, user_text):
+async def ask_groq(user_id, user_text):
     if not OPENAI_API_KEY:
         logger.error("API-ключ не задан!")
         return "Ошибка конфигурации."
