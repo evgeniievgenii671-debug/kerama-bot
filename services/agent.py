@@ -120,7 +120,7 @@ async def ask_groq(history):
                 model=model,
                 messages=messages,
                 temperature=0.3,
-                max_tokens=300,
+                max_tokens=500,
             )
             text = response.choices[0].message.content
 
