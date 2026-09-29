@@ -1,93 +1,158 @@
 import os
 import logging
-import requests
+from openai import AsyncOpenAI
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+logger = logging.getLogger(__name__)
 
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") or os.environ.get("GROQ_API_KEY")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
 
-SYSTEM_PROMPT = """Ты — Алекс, менеджер GidroBase (Алматы).
-Отвечай ТОЛЬКО на русском, грамотно.
+client = AsyncOpenAI(
+    api_key=OPENAI_API_KEY,
+    base_url=OPENAI_BASE_URL
+)
+
+SYSTEM_PROMPT = """Ты — Алекс, менеджер компании GidroBase (Алматы).
+Отвечай ТОЛЬКО на русском, грамотно, дружелюбно.
 
 УСЛУГИ:
-1. Гидроизоляция кровель (ЖК, склады, ТРЦ, паркинги).
-2. Промышленные и полимерные полы (гаражи, автосервисы, склады, 3D).
+1. Гидроизоляция кровель — наплавляемая, обмазочная, ремонт, устранение протечек. Для ЖК, складов, ТРЦ, террас, паркингов.
+2. Полы — эпоксидные, полиуретановые, 3D, бетонные. Для гаражей, паркингов, складов, автосервисов, производств.
 
 ФАКТЫ:
-Опыт 10+ лет. 120+ объектов. Гарантия до 10 лет. Выезд инженера — БЕСПЛАТНО.
+- 10+ лет опыта, 120+ объектов
+- Свои бригады, морозостойкие материалы
+- Срок 3–5 дней
+- Гарантия по договору до 10 лет
+- Выезд инженера на замер — БЕСПЛАТНО
 
-СТРОГИЕ ПРАВИЛА:
-1. ЗАПРЕЩЕНО писать в начале ответа "Бот:" или "Алекс:". Пиши сразу текст.
-2. Отвечай 1-2 предложениями. ОДИН вопрос за раз.
-3. Если клиент назвал имя — используй его. Если НЕ назвал — вежливо спроси.
-4. Если клиент написал много сразу (объект, площадь, город), но БЕЗ имени:
-   - Сначала спроси имя.
-   - Потом уточни детали (состояние, сроки).
-   - Только потом проси телефон.
-5. ЗАПРЕЩЕНО называть цены. Только: "Точную смету инженер рассчитает на бесплатном замере".
-6. Пиши грамотно. Никаких "Ваше телефонный номер".
-7. Веди диалог: Имя -> Услуга -> Детали -> Телефон.
+ПРАВИЛА:
+1. Отвечай 1-2 предложениями. Не больше!
+2. Задавай ТОЛЬКО ОДИН вопрос за раз.
+3. ИМЯ — НЕ ОБЯЗАТЕЛЬНО! Спроси 1 раз. Если клиент не назвал — БОЛЬШЕ НЕ СПРАШИВАЙ, иди дальше.
+4. НЕ ПОВТОРЯЙ имя в каждом ответе.
+5. Понимай короткие ответы: «Не важно», «Да», «Ну» = согласие/отказ отвечать.
+6. Точные цены не называй. Говори: "Точную смету инженер рассчитает после бесплатного замера".
+7. Не пиши длинные монологи и обрывки. Только законченные фразы.
+
+ПОРЯДОК ДИАЛОГА:
+1. Спроси имя (1 раз)
+2. Кровля или полы?
+3. Какой объект, где находится?
+4. Площадь?
+5. Оставьте номер — инженер приедет бесплатно
 
 ПРИМЕРЫ:
-Клиент: Нужен пол в гараж 70 кв.м
-Бот: Отлично! Подскажите, как я могу к вам обращаться? 😊
+Клиент: Не важно (после вопроса об имени)
+Бот: Хорошо! Тогда уточните, что вас интересует — кровля или полы?
 
-Клиент: Евгений
-Бот: Приятно познакомиться, Евгений! А в каком районе Алматы находится гараж? 📍
+Клиент: Кровля
+Бот: Понял! Какой у вас объект — ЖК, склад, ТРЦ?
+
+Клиент: Склад
+Бот: Отлично! В каком районе Алматы находится?
+
+Клиент: 500 м²
+Бот: Понял! Оставьте номер — инженер приедет на бесплатный замер.
 """
 
+# Плохие модели — исключаем
+BAD_MODELS = [
+    "whisper", "tts", "orpheus", "guard",
+    "arabic", "saudi", "allam",
+    "llama-3.2-1b", "llama-3.2-3b",
+]
 
-def get_available_models():
+PRIORITY = [
+    "llama-3.3-70b-versatile",
+    "openai/gpt-oss-120b",
+    "moonshotai/kimi-k2",
+    "meta-llama/llama-4-maverick",
+    "llama-3.1-8b-instant",
+]
+
+
+async def get_good_models() -> list:
     try:
-        r = requests.get(
-            "https://api.groq.com/openai/v1/models",
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
-            timeout=10
-        )
-        return [m["id"] for m in r.json().get("data", [])]
+        response = await client.models.list()
+        all_models = [m.id for m in response.data]
+        good = [m for m in all_models if not any(bad in m.lower() for bad in BAD_MODELS)]
+        logger.info(f"Подходящих моделей: {good}")
+        return good
     except Exception as e:
-        logging.error(f"Ошибка списка моделей: {e}")
+        logger.error(f"Ошибка получения моделей: {e}")
         return []
 
 
-def pick_best_model(models):
-    # Приоритет отдаем САМЫМ УМНЫМ моделям
-    priorities = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama3-70b", "mixtral-8x7b"]
-    for pref in priorities:
+def sort_by_priority(models: list) -> list:
+    result = []
+    for pref in PRIORITY:
         for m in models:
-            if pref in m:
-                return m
-    # Если умных нет, берем любую
-    return models[0] if models else None
+            if pref in m.lower() and m not in result:
+                result.append(m)
+    for m in models:
+        if m not in result:
+            result.append(m)
+    return result
 
 
-def ask_groq(history):
-    if not GROQ_API_KEY:
+async def ask_agent(user_id, user_text):
+    if not OPENAI_API_KEY:
+        logger.error("API-ключ не задан!")
         return "Ошибка конфигурации."
 
-    models = get_available_models()
+    add_message = None
+    try:
+        from services.memory import get_history, add_message
+        history = await get_history(user_id)
+        await add_message(user_id, "user", user_text)
+        history = history + [{"role": "user", "content": user_text}]
+    except Exception as e:
+        logger.warning(f"Память недоступна: {e}")
+        history = [{"role": "user", "content": user_text}]
+
+    models = await get_good_models()
     if not models:
         return "Проблема с AI. Попробуйте позже 🙏"
 
-    best = pick_best_model(models)
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    models_to_try = sort_by_priority(models)[:5]
+    logger.info(f"Порядок попыток: {models_to_try}")
 
-    for model in [best] + [m for m in models if m != best][:4]:
-        payload = {
-            "model": model,
-            "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + history,
-            "temperature": 0.3  # Чем ниже, тем меньше бот выдумывает
-        }
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history[-10:]
+
+    last_error = None
+    for model in models_to_try:
         try:
-            r = requests.post(url, json=payload, headers=headers, timeout=30)
-            data = r.json()
-            if "choices" in data:
-                logging.info(f"✅ Ответила модель: {model}")
-                return data["choices"][0]["message"]["content"]
-        except Exception as e:
-            logging.error(f"Ошибка {model}: {e}")
+            response = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=300,
+            )
+            text = response.choices[0].message.content
 
+            if not text or not text.strip():
+                logger.warning(f"{model}: пустой ответ")
+                continue
+
+            text = text.strip()
+            if text and text[-1] not in ".!?…":
+                text += "."
+
+            logger.info(f"✅ Ответила: {model}")
+
+            if add_message:
+                try:
+                    await add_message(user_id, "assistant", text)
+                except Exception:
+                    pass
+
+            return text
+
+        except Exception as e:
+            last_error = str(e)
+            logger.warning(f"{model} не сработала: {e}")
+            continue
+
+    logger.error(f"Все упали. Последняя: {last_error}")
     return "Извините, сейчас не могу ответить 🙏"
