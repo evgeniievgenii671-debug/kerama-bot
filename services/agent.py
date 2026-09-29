@@ -56,7 +56,6 @@ SYSTEM_PROMPT = """Ты — Алекс, менеджер компании GidroB
 Бот: Понял! Оставьте номер — инженер приедет на бесплатный замер.
 """
 
-# Плохие модели — исключаем
 BAD_MODELS = [
     "whisper", "tts", "orpheus", "guard",
     "arabic", "saudi", "allam",
@@ -96,20 +95,14 @@ def sort_by_priority(models: list) -> list:
     return result
 
 
-async def ask_groq(user_id, user_text):
+async def ask_groq(history):
+    """
+    Принимает готовую историю диалога (list of dicts) и возвращает ответ.
+    bot.py сам загружает и сохраняет историю.
+    """
     if not OPENAI_API_KEY:
         logger.error("API-ключ не задан!")
         return "Ошибка конфигурации."
-
-    add_message = None
-    try:
-        from services.memory import get_history, add_message
-        history = await get_history(user_id)
-        await add_message(user_id, "user", user_text)
-        history = history + [{"role": "user", "content": user_text}]
-    except Exception as e:
-        logger.warning(f"Память недоступна: {e}")
-        history = [{"role": "user", "content": user_text}]
 
     models = await get_good_models()
     if not models:
@@ -140,13 +133,6 @@ async def ask_groq(user_id, user_text):
                 text += "."
 
             logger.info(f"✅ Ответила: {model}")
-
-            if add_message:
-                try:
-                    await add_message(user_id, "assistant", text)
-                except Exception:
-                    pass
-
             return text
 
         except Exception as e:
