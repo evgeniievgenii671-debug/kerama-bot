@@ -66,14 +66,15 @@ def is_phone_message(text):
 
 
 # ============ УВЕДОМЛЕНИЯ ============
-async def notify_admins(text):
+async def notify_admins(text, photo=None):
     for admin_id in ADMIN_IDS:
-        if admin_id == 0:
-            continue
         try:
-            await bot.send_message(admin_id, text)
+            if photo:
+                await bot.send_photo(admin_id, photo=photo, caption=text, parse_mode="HTML")
+            else:
+                await bot.send_message(admin_id, text, parse_mode="HTML")
         except Exception as e:
-            logging.error(f"Не удалось отправить админу {admin_id}: {e}")
+            logging.error(f"Не удалось уведомить админа {admin_id}: {e}")
 
 
 # ============ /start ============
@@ -234,6 +235,33 @@ async def cmd_help(message: types.Message):
     await message.answer(text)
 
 
+# ============ ФОТО ОТ КЛИЕНТА ============
+@dp.message_handler(content_types=["photo"])
+async def handle_client_photo(message: types.Message):
+    user_id = message.from_user.id
+    username = message.from_user.username or "—"
+    full_name = message.from_user.full_name
+    caption = message.caption or "(без подписи)"
+    photo_id = message.photo[-1].file_id
+
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_photo(
+                admin_id,
+                photo=photo_id,
+                caption=(
+                    f"📷 <b>Клиент прислал фото</b>\n\n"
+                    f"👤 {full_name}\n"
+                    f"📱 @{username}\n"
+                    f"🆔 <code>{user_id}</code>\n\n"
+                    f"💬 {caption}"
+                ),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logging.error(f"Ошибка пересылки фото: {e}")
+
+    await message.answer("📷 Спасибо за фото! Передал менеджеру.")
 # ============ ОБРАБОТКА ТЕКСТА ============
 @dp.message_handler(content_types=["text"])
 async def handle_message(message: types.Message):
