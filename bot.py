@@ -48,6 +48,7 @@ DEMO_KEYWORDS = [
     "покажи фото", "пришли фото", "портфолио", "кейс",
     "образец", "образцы", "демо", "фотки", "фото работ",
 ]
+
 def is_demo_request(text):
     t = text.lower()
     return any(kw in t for kw in DEMO_KEYWORDS)
@@ -77,12 +78,14 @@ async def notify_admins(text, photo=None):
             logging.error(f"Не удалось уведомить админа {admin_id}: {e}")
 
 
+def is_admin(message):
+    return message.from_user.id in ADMIN_IDS
+
+
 # ============ /start ============
 @dp.message_handler(commands=["start"])
 async def cmd_start(message: types.Message):
-    # ОЧИЩАЕМ ПАМЯТЬ ПРИ СТАРТЕ, ЧТОБЫ БОТ НЕ ПУТАЛСЯ В СТАРЫХ ДИАЛОГАХ
-    user_memory[message.from_user.id] = [] 
-    
+    user_memory[message.from_user.id] = []
     text = (
         "👋 Здравствуйте! Меня зовут Алекс, я менеджер компании <b>GidroBase</b>.\n\n"
         "Мы занимаемся в Алматы и области:\n"
@@ -144,10 +147,6 @@ async def cmd_demo(message: types.Message):
 
 
 # ============ АДМИН: демо ============
-def is_admin(message):
-    return message.from_user.id in ADMIN_IDS
-
-
 @dp.message_handler(commands=["add_demo"])
 async def cmd_add_demo(message: types.Message):
     if not is_admin(message):
@@ -187,26 +186,6 @@ async def cmd_clear_demo(message: types.Message):
     await message.answer("🗑 Демо-материалы удалены.")
 
 
-@dp.message_handler(content_types=["photo"])
-async def handle_photo(message: types.Message):
-    if not adding_mode["active"] or not is_admin(message):
-        return
-    file_id = message.photo[-1].file_id
-    demo_data["photos"].append({"file_id": file_id, "caption": message.caption or ""})
-    save_demo(demo_data)
-    await message.answer(f"✅ Фото ({len(demo_data['photos'])} шт.)")
-
-
-@dp.message_handler(content_types=["video"])
-async def handle_video(message: types.Message):
-    if not adding_mode["active"] or not is_admin(message):
-        return
-    file_id = message.video.file_id
-    demo_data["videos"].append({"file_id": file_id, "caption": message.caption or ""})
-    save_demo(demo_data)
-    await message.answer(f"✅ Видео ({len(demo_data['videos'])} шт.)")
-
-
 # ============ АДМИН: прочее ============
 @dp.message_handler(commands=["clear"])
 async def cmd_clear(message: types.Message):
@@ -235,9 +214,18 @@ async def cmd_help(message: types.Message):
     await message.answer(text)
 
 
-# ============ ФОТО ОТ КЛИЕНТА ============
+# ============ ФОТО (админ + клиент) ============
 @dp.message_handler(content_types=["photo"])
-async def handle_client_photo(message: types.Message):
+async def handle_photo_unified(message: types.Message):
+    # Если админ в режиме добавления — сохраняем как демо
+    if adding_mode["active"] and is_admin(message):
+        file_id = message.photo[-1].file_id
+        demo_data["photos"].append({"file_id": file_id, "caption": message.caption or ""})
+        save_demo(demo_data)
+        await message.answer(f"✅ Фото ({len(demo_data['photos'])} шт.)")
+        return
+
+    # Иначе — клиент прислал фото, пересылаем админам
     user_id = message.from_user.id
     username = message.from_user.username or "—"
     full_name = message.from_user.full_name
@@ -262,6 +250,46 @@ async def handle_client_photo(message: types.Message):
             logging.error(f"Ошибка пересылки фото: {e}")
 
     await message.answer("📷 Спасибо за фото! Передал менеджеру.")
+
+
+# ============ ВИДЕО (админ + клиент) ============
+@dp.message_handler(content_types=["video"])
+async def handle_video_unified(message: types.Message):
+    # Админ добавляет демо
+    if adding_mode["active"] and is_admin(message):
+        file_id = message.video.file_id
+        demo_data["videos"].append({"file_id": file_id, "caption": message.caption or ""})
+        save_demo(demo_data)
+        await message.answer(f"✅ Видео ({len(demo_data['videos'])} шт.)")
+        return
+
+    # Клиент прислал видео — пересылаем
+    user_id = message.from_user.id
+    username = message.from_user.username or "—"
+    full_name = message.from_user.full_name
+    caption = message.caption or "(без подписи)"
+    video_id = message.video.file_id
+
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_video(
+                admin_id,
+                video=video_id,
+                caption=(
+                    f"🎥 <b>Клиент прислал видео</b>\n\n"
+                    f"👤 {full_name}\n"
+                    f"📱 @{username}\n"
+                    f"🆔 <code>{user_id}</code>\n\n"
+                    f"💬 {caption}"
+                ),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logging.error(f"Ошибка пересылки видео: {e}")
+
+    await message.answer("🎥 Спасибо за видео! Передал менеджеру.")
+
+
 # ============ ОБРАБОТКА ТЕКСТА ============
 @dp.message_handler(content_types=["text"])
 async def handle_message(message: types.Message):
