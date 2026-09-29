@@ -87,11 +87,11 @@ def is_admin(message):
 async def cmd_start(message: types.Message):
     user_memory[message.from_user.id] = []
     text = (
-        "👋 Здравствуйте! Меня зовут Алекс, я менеджер компании <b>GidroBase</b>.\n\n"
+        "👋 Здравствуйте! Меня зовут Алекс, я менеджер компании <b>БетонСтройСервис</b>.\n\n"
         "Мы занимаемся в Алматы и области:\n"
-        "✅ Гидроизоляция кровель\n"
-        "✅ Промышленные и полимерные полы\n\n"
-        "Выезд инженера — бесплатно.\n\n"
+        "✅ Доставка бетона всех марок (М100–М500)\n"
+        "✅ Аренда бетононасосов\n\n"
+        "Работаем 24/7. Свой автопарк миксеров и насосов.\n\n"
         "Как я могу к вам обращаться? 😊"
     )
     await message.answer(text)
@@ -101,19 +101,16 @@ async def cmd_start(message: types.Message):
 @dp.message_handler(commands=["checklist"])
 async def cmd_checklist(message: types.Message):
     text = (
-        "📋 <b>Чек-лист для подготовки к замеру</b>\n\n"
-        "🏠 <b>Для кровли:</b>\n"
-        "1. Тип кровли (плоская/скатная)\n"
-        "2. Площадь (м²)\n"
-        "3. Состояние (протечки, трещины)\n"
-        "4. Тип здания (ЖК, склад, ТРЦ, дом)\n\n"
-        "🧱 <b>Для полов:</b>\n"
-        "1. Площадь (м²)\n"
-        "2. Основание (бетон, стяжка)\n"
-        "3. Состояние (трещины, ямы)\n"
-        "4. Тип пола (эпоксид, полиуретан, бетон)\n\n"
-        "💡 <b>Выезд инженера — бесплатно.</b>\n"
-        "Оставьте номер телефона, и мы свяжемся 👇"
+        "📋 <b>Чек-лист для заказа бетона</b>\n\n"
+        "Чтобы мы рассчитали точную цену, уточните:\n\n"
+        "1️⃣ <b>Марка бетона</b> — М100, М200, М300, М400, М500\n"
+        "2️⃣ <b>Объём</b> — сколько м³?\n"
+        "3️⃣ <b>Адрес доставки</b> — район, улица\n"
+        "4️⃣ <b>Дата и время</b> — когда нужен бетон?\n"
+        "5️⃣ <b>Бетононасос</b> — нужен ли (для высоких этажей)?\n"
+        "6️⃣ <b>Подъезд</b> — сможет ли миксер подъехать?\n\n"
+        "💡 <b>Работаем 24/7. Скидки от 20 м³.</b>\n"
+        "Оставьте номер телефона — менеджер свяжется 👇"
     )
     await message.answer(text)
 
@@ -141,8 +138,8 @@ async def send_demo(chat_id):
 async def cmd_demo(message: types.Message):
     await send_demo(message.from_user.id)
     await message.answer(
-        "📋 Хотите такой же результат? Отправьте /checklist.\n"
-        "Или оставьте номер — инженер свяжется 👍"
+        "📋 Хотите заказать бетон? Отправьте /checklist.\n"
+        "Или оставьте номер — менеджер свяжется 👍"
     )
 
 
@@ -217,7 +214,6 @@ async def cmd_help(message: types.Message):
 # ============ ФОТО (админ + клиент) ============
 @dp.message_handler(content_types=["photo"])
 async def handle_photo_unified(message: types.Message):
-    # Если админ в режиме добавления — сохраняем как демо
     if adding_mode["active"] and is_admin(message):
         file_id = message.photo[-1].file_id
         demo_data["photos"].append({"file_id": file_id, "caption": message.caption or ""})
@@ -225,7 +221,6 @@ async def handle_photo_unified(message: types.Message):
         await message.answer(f"✅ Фото ({len(demo_data['photos'])} шт.)")
         return
 
-    # Иначе — клиент прислал фото, пересылаем админам
     user_id = message.from_user.id
     username = message.from_user.username or "—"
     full_name = message.from_user.full_name
@@ -255,7 +250,6 @@ async def handle_photo_unified(message: types.Message):
 # ============ ВИДЕО (админ + клиент) ============
 @dp.message_handler(content_types=["video"])
 async def handle_video_unified(message: types.Message):
-    # Админ добавляет демо
     if adding_mode["active"] and is_admin(message):
         file_id = message.video.file_id
         demo_data["videos"].append({"file_id": file_id, "caption": message.caption or ""})
@@ -263,7 +257,6 @@ async def handle_video_unified(message: types.Message):
         await message.answer(f"✅ Видео ({len(demo_data['videos'])} шт.)")
         return
 
-    # Клиент прислал видео — пересылаем
     user_id = message.from_user.id
     username = message.from_user.username or "—"
     full_name = message.from_user.full_name
@@ -307,7 +300,7 @@ async def handle_message(message: types.Message):
 
     if phone_detected:
         await notify_admins(
-            f"🔥 <b>НОВАЯ ЗАЯВКА!</b>\n\n"
+            f"🔥 <b>НОВАЯ ЗАЯВКА НА БЕТОН!</b>\n\n"
             f"👤 Клиент: {full_name}\n"
             f"📱 @{username}\n"
             f"🆔 ID: <code>{user_id}</code>\n\n"
@@ -320,7 +313,7 @@ async def handle_message(message: types.Message):
         add_to_memory(user_id, "assistant", "[Показал примеры работ]")
         await message.answer(
             "📋 Понравилось? Давайте подберём под ваш объект.\n\n"
-            "Что вас интересует — кровля или полы? 🏠"
+            "Какая марка бетона нужна? 🏗"
         )
         if not phone_detected:
             await notify_admins(
@@ -328,7 +321,7 @@ async def handle_message(message: types.Message):
                 f"👤 {full_name} (@{username})\n"
                 f"🆔 <code>{user_id}</code>\n"
                 f"💬 {user_text}\n\n"
-                f"→ Бот показал демо-материалы."
+                f"→ Бот показал примеры работ."
             )
         return
 
@@ -354,7 +347,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"GidroBase bot is running!")
+        self.wfile.write(b"Beton bot is running!")
 
     def log_message(self, format, *args):
         pass
